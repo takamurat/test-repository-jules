@@ -1,172 +1,221 @@
 document.addEventListener('DOMContentLoaded', () => {
-    const boardElement = document.getElementById('board');
-    const currentPlayerElement = document.getElementById('current-player');
-    const blackScoreElement = document.getElementById('black-score');
-    const whiteScoreElement = document.getElementById('white-score');
-    const resetButton = document.getElementById('reset-button');
+    const canvas = document.getElementById('tetris-board');
+    const context = canvas.getContext('2d');
+    const scoreElement = document.getElementById('score');
 
-    const PLAYER_BLACK = 'black';
-    const PLAYER_WHITE = 'white';
-    const SIZE = 8;
+    const COLS = 10;
+    const ROWS = 20;
+    const BLOCK_SIZE = 24;
 
-    let board = [];
-    let currentPlayer;
+    context.scale(BLOCK_SIZE, BLOCK_SIZE);
 
-    function initGame() {
-        board = Array(SIZE).fill(null).map(() => Array(SIZE).fill(null));
-        board[3][3] = PLAYER_WHITE;
-        board[3][4] = PLAYER_BLACK;
-        board[4][3] = PLAYER_BLACK;
-        board[4][4] = PLAYER_WHITE;
-        currentPlayer = PLAYER_BLACK;
-        renderBoard();
-        updateInfo();
-        // Make sure clicks are enabled at the start of a new game
-        boardElement.addEventListener('click', handleCellClick);
+    let score = 0;
+    let board = createBoard(COLS, ROWS);
+    let piece = null;
+
+    const COLORS = [
+        null,
+        '#FF0D72', // T
+        '#0DC2FF', // O
+        '#0DFF72', // L
+        '#F538FF', // J
+        '#FF8E0D', // I
+        '#FFE138', // S
+        '#3877FF', // Z
+    ];
+
+    function createBoard(cols, rows) {
+        const matrix = [];
+        while (rows--) {
+            matrix.push(new Array(cols).fill(0));
+        }
+        return matrix;
     }
 
-    function renderBoard() {
-        boardElement.innerHTML = '';
-        for (let row = 0; row < SIZE; row++) {
-            for (let col = 0; col < SIZE; col++) {
-                const cell = document.createElement('div');
-                cell.classList.add('cell');
-                cell.dataset.row = row;
-                cell.dataset.col = col;
-                if (board[row][col]) {
-                    const piece = document.createElement('div');
-                    piece.classList.add('piece', board[row][col]);
-                    cell.appendChild(piece);
+    function createPiece(type) {
+        if (type === 'T') {
+            return [[0, 1, 0], [1, 1, 1], [0, 0, 0]];
+        } else if (type === 'O') {
+            return [[2, 2], [2, 2]];
+        } else if (type === 'L') {
+            return [[0, 3, 0], [0, 3, 0], [0, 3, 3]];
+        } else if (type === 'J') {
+            return [[0, 4, 0], [0, 4, 0], [4, 4, 0]];
+        } else if (type === 'I') {
+            return [[0, 5, 0, 0], [0, 5, 0, 0], [0, 5, 0, 0], [0, 5, 0, 0]];
+        } else if (type === 'S') {
+            return [[0, 6, 6], [6, 6, 0], [0, 0, 0]];
+        } else if (type === 'Z') {
+            return [[7, 7, 0], [0, 7, 7], [0, 0, 0]];
+        }
+    }
+
+    function draw() {
+        // Draw the board
+        context.fillStyle = '#000';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+
+        drawMatrix(board, { x: 0, y: 0 });
+        if (piece) {
+            drawMatrix(piece.matrix, piece.pos);
+        }
+    }
+
+    function drawMatrix(matrix, offset) {
+        matrix.forEach((row, y) => {
+            row.forEach((value, x) => {
+                if (value !== 0) {
+                    context.fillStyle = COLORS[value];
+                    context.fillRect(x + offset.x, y + offset.y, 1, 1);
                 }
-                boardElement.appendChild(cell);
-            }
-        }
-    }
-
-    function updateInfo() {
-        let blackScore = 0;
-        let whiteScore = 0;
-        for (let r = 0; r < SIZE; r++) {
-            for (let c = 0; c < SIZE; c++) {
-                if (board[r][c] === PLAYER_BLACK) blackScore++;
-                if (board[r][c] === PLAYER_WHITE) whiteScore++;
-            }
-        }
-        currentPlayerElement.textContent = currentPlayer === PLAYER_BLACK ? '黒' : '白';
-        blackScoreElement.textContent = blackScore;
-        whiteScoreElement.textContent = whiteScore;
-    }
-
-    function getFlips(row, col, player) {
-        const opponent = player === PLAYER_BLACK ? PLAYER_WHITE : PLAYER_BLACK;
-        const directions = [
-            { r: -1, c: -1 }, { r: -1, c: 0 }, { r: -1, c: 1 },
-            { r: 0, c: -1 }, { r: 0, c: 1 },
-            { r: 1, c: -1 }, { r: 1, c: 0 }, { r: 1, c: 1 }
-        ];
-        let allFlips = [];
-
-        for (const dir of directions) {
-            let flipsInDir = [];
-            let r = row + dir.r;
-            let c = col + dir.c;
-
-            while (r >= 0 && r < SIZE && c >= 0 && c < SIZE && board[r][c] === opponent) {
-                flipsInDir.push({ row: r, col: c });
-                r += dir.r;
-                c += dir.c;
-            }
-
-            if (r >= 0 && r < SIZE && c >= 0 && c < SIZE && board[r][c] === player && flipsInDir.length > 0) {
-                allFlips = allFlips.concat(flipsInDir);
-            }
-        }
-        return allFlips;
-    }
-
-    function getValidMoves(player) {
-        const validMoves = [];
-        for (let row = 0; row < SIZE; row++) {
-            for (let col = 0; col < SIZE; col++) {
-                if (board[row][col] === null) {
-                    if (getFlips(row, col, player).length > 0) {
-                        validMoves.push({ row, col });
-                    }
-                }
-            }
-        }
-        return validMoves;
-    }
-
-    function handleCellClick(event) {
-        const cell = event.target.closest('.cell');
-        if (!cell || board[cell.dataset.row][cell.dataset.col]) {
-            return;
-        }
-
-        const row = parseInt(cell.dataset.row, 10);
-        const col = parseInt(cell.dataset.col, 10);
-
-        const piecesToFlip = getFlips(row, col, currentPlayer);
-        if (piecesToFlip.length === 0) {
-            return; // Invalid move
-        }
-
-        board[row][col] = currentPlayer;
-        piecesToFlip.forEach(piece => {
-            board[piece.row][piece.col] = currentPlayer;
+            });
         });
-
-        switchPlayer();
-        renderBoard();
-        updateInfo();
-        handleTurnEnd();
     }
 
-    function switchPlayer() {
-        currentPlayer = currentPlayer === PLAYER_BLACK ? PLAYER_WHITE : PLAYER_BLACK;
+    function merge(board, piece) {
+        piece.matrix.forEach((row, y) => {
+            row.forEach((value, x) => {
+                if (value !== 0) {
+                    board[y + piece.pos.y][x + piece.pos.x] = value;
+                }
+            });
+        });
     }
 
-    function handleTurnEnd() {
-        if (getValidMoves(currentPlayer).length > 0) {
-            return; // Game continues
-        }
-
-        // Current player has no moves, check opponent
-        switchPlayer();
-        updateInfo(); // Show that turn is trying to pass
-        if (getValidMoves(currentPlayer).length > 0) {
-            alert(`${currentPlayer === PLAYER_BLACK ? '白' : '黒'}のターンはパスされました。`);
-            return; // Opponent has moves
-        }
-
-        // Neither player has moves, game over
-        endGame();
-    }
-
-    function endGame() {
-        let blackScore = 0;
-        let whiteScore = 0;
-        for (let r = 0; r < SIZE; r++) {
-            for (let c = 0; c < SIZE; c++) {
-                if (board[r][c] === PLAYER_BLACK) blackScore++;
-                if (board[r][c] === PLAYER_WHITE) whiteScore++;
+    function rotate(matrix, dir) {
+        for (let y = 0; y < matrix.length; ++y) {
+            for (let x = 0; x < y; ++x) {
+                [matrix[x][y], matrix[y][x]] = [matrix[y][x], matrix[x][y]];
             }
         }
 
-        let message = 'ゲーム終了！\n';
-        if (blackScore > whiteScore) {
-            message += '黒の勝ちです！';
-        } else if (whiteScore > blackScore) {
-            message += '白の勝ちです！';
+        if (dir > 0) {
+            matrix.forEach(row => row.reverse());
         } else {
-            message += '引き分けです！';
+            matrix.reverse();
         }
-
-        setTimeout(() => alert(message), 100);
-        boardElement.removeEventListener('click', handleCellClick);
     }
 
-    resetButton.addEventListener('click', initGame);
-    initGame();
+    function pieceDrop() {
+        if (!piece) return;
+        piece.pos.y++;
+        if (collide(board, piece)) {
+            piece.pos.y--;
+            merge(board, piece);
+            resetPiece();
+            sweepBoard();
+            updateScore();
+        }
+        dropCounter = 0;
+    }
+
+    function pieceMove(dir) {
+        if (!piece) return;
+        piece.pos.x += dir;
+        if (collide(board, piece)) {
+            piece.pos.x -= dir;
+        }
+    }
+
+    function pieceRotate(dir) {
+        if (!piece) return;
+        const pos = piece.pos.x;
+        let offset = 1;
+        rotate(piece.matrix, dir);
+        while (collide(board, piece)) {
+            piece.pos.x += offset;
+            offset = -(offset + (offset > 0 ? 1 : -1));
+            if (offset > piece.matrix[0].length) {
+                rotate(piece.matrix, -dir);
+                piece.pos.x = pos;
+                return;
+            }
+        }
+    }
+
+    function collide(board, piece) {
+        const [m, o] = [piece.matrix, piece.pos];
+        for (let y = 0; y < m.length; ++y) {
+            for (let x = 0; x < m[y].length; ++x) {
+                if (m[y][x] !== 0 && (board[y + o.y] && board[y + o.y][x + o.x]) !== 0) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    function resetPiece() {
+        const pieces = 'TJLOSZI';
+        piece = {
+            pos: { x: Math.floor(COLS / 2) - 1, y: 0 },
+            matrix: createPiece(pieces[pieces.length * Math.random() | 0]),
+        };
+
+        if (collide(board, piece)) {
+            // Game Over
+            board.forEach(row => row.fill(8)); // Use a different color for game over
+            alert('Game Over! Score: ' + score);
+            // Stop the game loop
+            update = () => {};
+        }
+    }
+
+
+    function sweepBoard() {
+        let rowCount = 1;
+        outer: for (let y = board.length - 1; y > 0; --y) {
+            for (let x = 0; x < board[y].length; ++x) {
+                if (board[y][x] === 0) {
+                    continue outer;
+                }
+            }
+
+            const row = board.splice(y, 1)[0].fill(0);
+            board.unshift(row);
+            ++y;
+
+            score += rowCount * 10;
+            rowCount *= 2;
+        }
+    }
+
+    function updateScore() {
+        scoreElement.innerText = score;
+    }
+
+    let dropCounter = 0;
+    let dropInterval = 1000; // 1 second
+    let lastTime = 0;
+
+    function update(time = 0) {
+        const deltaTime = time - lastTime;
+        lastTime = time;
+
+        dropCounter += deltaTime;
+        if (dropCounter > dropInterval) {
+            pieceDrop();
+        }
+
+        draw();
+        requestAnimationFrame(update);
+    }
+
+    document.addEventListener('keydown', event => {
+        if (event.keyCode === 37) { // Left arrow
+            pieceMove(-1);
+        } else if (event.keyCode === 39) { // Right arrow
+            pieceMove(1);
+        } else if (event.keyCode === 40) { // Down arrow
+            pieceDrop();
+        } else if (event.keyCode === 81) { // Q for rotate left
+            pieceRotate(-1);
+        } else if (event.keyCode === 87 || event.keyCode === 38) { // W or Up arrow for rotate right
+            pieceRotate(1);
+        }
+    });
+
+    resetPiece();
+    updateScore();
+    update();
 });
